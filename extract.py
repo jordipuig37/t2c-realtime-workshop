@@ -8,8 +8,8 @@ import datetime as dt
 
 load_dotenv()
 
-upload_file_path = f"data_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-bcn_od_url = "https://opendata-ajuntament.barcelona.cat/data/en/dataset/informacio-estacions-bicing/resource/f60e9291-5aaa-417d-9b91-612a9de800aa/download/recurs.json"
+upload_file_path = f"stations_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+bcn_od_url = "https://opendata-ajuntament.barcelona.cat/data/es/dataset/estat-estacions-bicing/resource/1b215493-9e63-4a12-8980-2d7e0fa19f85/download/recurs.json"
 headers = {
   'Authorization': os.environ["API_KEY"]
 }
@@ -17,12 +17,12 @@ headers = {
 response = requests.get(bcn_od_url, headers=headers)
 
 with open(upload_file_path, 'w') as f:
-    json.dump(response.json(), f, indent=2)
+    json.dump(response.json()["data"]["stations"], f, indent=2)
 
 
-container_name = "testjordi"
-target_file_name = f"realtime/{upload_file_path}"
-adls_account_url = "https://t2caacrcdls.blob.core.windows.net"
+container_name = "bicing"
+target_file_name = f"daily_data/{upload_file_path}"
+adls_account_url = "https://t2crealtimeworkshop.blob.core.windows.net"
 sas_token = os.environ["SAS_TOKEN"]
 
 # Create the BlobServiceClient object
