@@ -1,7 +1,6 @@
 import requests
 import json
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient, BlobClient
+import boto3
 import os
 from dotenv import load_dotenv
 import datetime as dt
@@ -19,18 +18,13 @@ response = requests.get(bcn_od_url, headers=headers)
 with open(upload_file_path, 'w') as f:
     json.dump(response.json()["data"]["stations"], f, indent=2)
 
-
-container_name = "bicing"
 target_file_name = f"daily_data/{upload_file_path}"
-adls_account_url = "https://t2crealtimeworkshop.blob.core.windows.net"
-sas_token = os.environ["SAS_TOKEN"]
+s3_bucket_name = os.environ["S3_BUCKET"]
 
-# Create the BlobServiceClient object
-blob_service_client = BlobServiceClient(account_url=adls_account_url, credential=sas_token)
+s3 = boto3.client("s3")
 
-# Create a blob client using the local file name as the name for the blob
-blob_client = blob_service_client.get_blob_client(container=container_name, blob=target_file_name)
-
-# Upload the created file
-with open(file=upload_file_path, mode="rb") as data:
-    blob_client.upload_blob(data)
+s3.upload_file(
+    Filename=upload_file_path,
+    Bucket=s3_bucket_name,
+    Key=f"real_time_data/{upload_file_path}",
+)
