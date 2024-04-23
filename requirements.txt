@@ -1,0 +1,4 @@
+snowflake-connector-python
+pandas
+streamlit_folium
+folium
