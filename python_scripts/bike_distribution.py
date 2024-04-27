@@ -3,6 +3,7 @@ from ortools.constraint_solver import pywrapcp
 import networkx as nx
 import numpy as np
 import snowflake.connector
+import streamlit as st
 
 
 def create_data_model(cnx: snowflake.connector.SnowflakeConnection):
@@ -16,6 +17,8 @@ def create_data_model(cnx: snowflake.connector.SnowflakeConnection):
     my_cur.execute("SELECT station_id, lat, lon FROM M_BICING_STATIONS")
 
     data["stations"] =  my_cur.fetchall()
+    # [ ] query table R_STATIONS_DISTANCE_MATRIX (SRC, TGT, DISTANCE) and convert
+    # it to the distance matrix (you may filter by distance)
     data['distance_matrix'] = np.array([
         [0, 1, 2],  # Example distance matrix (replace with actual distances)
         [1, 0, 3],
@@ -42,7 +45,8 @@ def create_graph(data):
     
     return G
 
-secrets = st.secrets
+secrets = st.secrets["snowflake"]  # this reads the secrets in the app.
+# [ ] to make it work in local use .streamlit/secrets.toml file
 
 def main():
     """Entry point of the program."""
