@@ -13,13 +13,22 @@ m_stations AS (
 
 auto_joined AS (
     SELECT
-        t1.STATION_ID AS SRC,
-        t2.STATION_ID AS TGT,
-        st_distance(st_makepoint(t1.LON, t1.LAT), st_makepoint(t2.LON, t2.LAT)) AS DISTANCE
+        t1.STATION_ID AS SRC_STATION_ID,
+        t2.STATION_ID AS TGT_STATION_ID,
+        st_distance(
+                st_makepoint(t1.LON, t1.LAT),
+                st_makepoint(t2.LON, t2.LAT)
+            ) AS DISTANCE
     FROM m_stations t1 FULL OUTER JOIN m_stations t2
+    WHERE
+        SRC_STATION_ID < TGT_STATION_ID  // use this to remove duplicates
 )
 
-SELECT *
-FROM auto_joined;
+SELECT * FROM auto_joined;
 
-select * FROM V_STATIONS_DISTANCE_MATRIX;
+// Materialize this view into a table to avoid the 5 seconds compute, and
+// enable potimization via filtering.
+CREATE OR REPLACE TABLE
+    R_STATIONS_DISTANCE_MATRIX
+AS
+SELECT * FROM V_STATIONS_DISTANCE_MATRIX;

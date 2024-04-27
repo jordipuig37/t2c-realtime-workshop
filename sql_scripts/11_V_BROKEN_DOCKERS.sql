@@ -8,7 +8,7 @@ m_stations AS (
     SELECT
         STATION_ID,
         CAPACITY AS TOTAL_DOCKS,
-        NAME,
+        STATION_NAME,
         ADDRESS,
         LAT, LON
     FROM M_BICING_STATIONS
@@ -23,7 +23,7 @@ current_ AS (
 
 final AS (
     SELECT
-        mm.STATION_ID, mm.NAME, mm.ADDRESS, mm.LAT, mm.LON,
+        mm.STATION_ID, mm.STATION_NAME, mm.ADDRESS, mm.LAT, mm.LON,
         mm.TOTAL_DOCKS - cc.TOTAL_USABLE_DOCKS AS BROKEN_DOCKS
 
     FROM m_stations mm
@@ -37,4 +37,3 @@ final AS (
 
 SELECT * FROM final;
 
-select * from V_BROKEN_DOCKERS;
