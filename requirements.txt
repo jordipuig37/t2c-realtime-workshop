@@ -1,4 +1,7 @@
-snowflake-connector-python
-pandas
-streamlit_folium
+boto3
 folium
+pandas
+python-dotenv
+requests
+snowflake-connector-python
+streamlit_folium
