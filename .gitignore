@@ -2,3 +2,6 @@
 data*
 *.json
 *.log
+.streamlit/secrets.toml
+*.drawio*
+*.crontab
