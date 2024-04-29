@@ -32,7 +32,7 @@ def broken_docks_page():
                 radius=30,
                 color="red",
                 fill_color="red",
-                tooltip=station["NAME"]
+                tooltip=station["STATION_NAME"]
             ).add_to(m)
 
         # Display the map
