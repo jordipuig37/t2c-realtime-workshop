@@ -13,17 +13,16 @@ def get_broken_dockers(my_cnx):
         data = my_cur.fetchall()
         return pd.DataFrame(data, columns=[x[0] for x in my_cur.description])
 
-def color_gradient(value, mean_value, std_dev):
-    if abs(value - mean_value) <= 0.5 * std_dev:
-        return "#0BDA51"  # Green if within 1 std of the average
-    elif value < mean_value:
-        ratio = (mean_value - value) / (3 * std_dev)
-        blue = int(255 * ratio)
-        return f"#{0:02x}{0:02x}{blue:02x}"  # Bluer the more below the average
-    else:
-        ratio = (value - mean_value) / (3 * std_dev)
-        red = int(255 * ratio)
-        return f"#{red:02x}{0:02x}{0:02x}"  # Redder the more above the average
+def color_gradient(value, min_value, max_value):
+    if value < min_value:
+        value = min_value
+    elif value > max_value:
+        value = max_value
+    
+    ratio = (value - min_value) / (max_value - min_value)
+    blue = int(255 * (1 - ratio))
+    red = int(255 * ratio)
+    return f"#{red:02x}{0:02x}{blue:02x}"
 
 def calculate_entropy(broken_docks, mean_broken_docks):
     max_capacity = 2 * mean_broken_docks
@@ -73,23 +72,23 @@ def plan_continuous_route(stations, bus_capacity, threshold=0.1, entropy_weight=
         current_station = stations_to_visit.iloc[from_node]
         next_station = stations_to_visit.iloc[to_node]
         
-        current_station_index = stations.index[stations['STATION_NAME'] == current_station['STATION_NAME']][0]
-        next_station_index = stations.index[stations['STATION_NAME'] == next_station['STATION_NAME']][0]
+        current_station_index = stations_copy[stations_copy['STATION_NAME'] == current_station['STATION_NAME']].index[0]
+        next_station_index = stations_copy[stations_copy['STATION_NAME'] == next_station['STATION_NAME']].index[0]
         
-        current_entropy = calculate_entropy(stations['BROKEN_DOCKS'], mean_broken_docks)
+        current_entropy = calculate_entropy(stations_copy['BROKEN_DOCKS'], mean_broken_docks)
         
         if current_station['NEED'] < 0:
-            amount_to_move = min(bus_capacity - bus_load, abs(current_station['NEED']), stations.at[current_station_index, 'BROKEN_DOCKS'])
+            amount_to_move = min(bus_capacity - bus_load, abs(current_station['NEED']), stations_copy.at[current_station_index, 'BROKEN_DOCKS'])
             amount_to_move = int(amount_to_move)
-            stations.at[current_station_index, 'BROKEN_DOCKS'] -= amount_to_move
-            stations.at[next_station_index, 'BROKEN_DOCKS'] += amount_to_move
+            stations_copy.at[current_station_index, 'BROKEN_DOCKS'] -= amount_to_move
+            stations_copy.at[next_station_index, 'BROKEN_DOCKS'] += amount_to_move
         else:
-            amount_to_move = min(bus_load, current_station['NEED'], bus_capacity - stations.at[next_station_index, 'BROKEN_DOCKS'])
+            amount_to_move = min(bus_load, current_station['NEED'], bus_capacity - stations_copy.at[next_station_index, 'BROKEN_DOCKS'])
             amount_to_move = int(amount_to_move)
-            stations.at[current_station_index, 'BROKEN_DOCKS'] += amount_to_move
-            stations.at[next_station_index, 'BROKEN_DOCKS'] -= amount_to_move
+            stations_copy.at[current_station_index, 'BROKEN_DOCKS'] += amount_to_move
+            stations_copy.at[next_station_index, 'BROKEN_DOCKS'] -= amount_to_move
         
-        next_entropy = calculate_entropy(stations['BROKEN_DOCKS'], mean_broken_docks)
+        next_entropy = calculate_entropy(stations_copy['BROKEN_DOCKS'], mean_broken_docks)
         entropy_diff = next_entropy - current_entropy
         
         distance = distance_matrix[from_node][to_node]
@@ -130,6 +129,7 @@ def plan_continuous_route(stations, bus_capacity, threshold=0.1, entropy_weight=
         route = []
         index = routing.Start(0)
         bus_load = 0
+        stations_copy = stations.copy()
         visited_stations = set()
         
         while not routing.IsEnd(index):
@@ -146,27 +146,27 @@ def plan_continuous_route(stations, bus_capacity, threshold=0.1, entropy_weight=
             
             visited_stations.add(current_station['STATION_NAME'])
             
-            current_station_index = stations.index[stations['STATION_NAME'] == current_station['STATION_NAME']][0]
-            next_station_index = stations.index[stations['STATION_NAME'] == next_station['STATION_NAME']][0]
+            current_station_index = stations_copy[stations_copy['STATION_NAME'] == current_station['STATION_NAME']].index[0]
+            next_station_index = stations_copy[stations_copy['STATION_NAME'] == next_station['STATION_NAME']].index[0]
             
             if current_station['NEED'] < 0:
-                amount_to_move = min(bus_capacity - bus_load, abs(current_station['NEED']), stations.at[current_station_index, 'BROKEN_DOCKS'])
+                amount_to_move = min(bus_capacity - bus_load, abs(current_station['NEED']), stations_copy.at[current_station_index, 'BROKEN_DOCKS'])
                 amount_to_move = int(amount_to_move)
                 bus_load += amount_to_move
                 action = f"Picked up {amount_to_move} bikes"
             else:
-                amount_to_move = min(bus_load, current_station['NEED'], bus_capacity - stations.at[next_station_index, 'BROKEN_DOCKS'])
+                amount_to_move = min(bus_load, current_station['NEED'], bus_capacity - stations_copy.at[next_station_index, 'BROKEN_DOCKS'])
                 amount_to_move = int(amount_to_move)
                 bus_load -= amount_to_move
                 action = f"Dropped off {amount_to_move} bikes"
             
-            stations.at[current_station_index, 'BROKEN_DOCKS'] += amount_to_move if current_station['NEED'] > 0 else -amount_to_move
+            stations_copy.at[current_station_index, 'BROKEN_DOCKS'] += amount_to_move if current_station['NEED'] > 0 else -amount_to_move
             
-            route.append((current_station['STATION_NAME'], next_station['STATION_NAME'], amount_to_move, action, bus_load, current_station['BROKEN_DOCKS'], stations.at[current_station_index, 'BROKEN_DOCKS']))
+            route.append((current_station['STATION_NAME'], next_station['STATION_NAME'], amount_to_move, action, bus_load, current_station['BROKEN_DOCKS'], stations_copy.at[current_station_index, 'BROKEN_DOCKS']))
             
             index = next_index
         
-        return route, stations
+        return route, stations_copy
     else:
         st.write("No solution found.")
         return [], stations
@@ -179,12 +179,13 @@ bus_capacity = st.slider("Bus Capacity", min_value=1, max_value=100, value=20, s
 with snowflake.connector.connect(**st.secrets["snowflake"]) as my_cnx:
     broken_docks = get_broken_dockers(my_cnx)
     mean_broken_docks = broken_docks['BROKEN_DOCKS'].mean()
-    std_dev_broken_docks = broken_docks['BROKEN_DOCKS'].std()
+    min_broken_docks = broken_docks['BROKEN_DOCKS'].min()
+    max_broken_docks = broken_docks['BROKEN_DOCKS'].max()
     initial_entropy = calculate_entropy(broken_docks['BROKEN_DOCKS'], mean_broken_docks)
 
     m = folium.Map(location=[41.3933173, 2.1812483], zoom_start=12, tiles='openstreetmap')
     for id, station in broken_docks.iterrows():
-        color = color_gradient(station['BROKEN_DOCKS'], mean_broken_docks, std_dev_broken_docks)
+        color = color_gradient(station['BROKEN_DOCKS'], min_broken_docks, max_broken_docks)
         folium.Circle(location=[station["LAT"], station["LON"]], radius=60, color=color, fill_color=color, tooltip=f"{station['STATION_NAME']} - Broken Docks: {station['BROKEN_DOCKS']}").add_to(m)
 
     route, updated_stations = plan_continuous_route(broken_docks, bus_capacity)
@@ -204,7 +205,7 @@ with snowflake.connector.connect(**st.secrets["snowflake"]) as my_cnx:
     # Create and display a map of the post-route distribution
     m_updated = folium.Map(location=[41.3933173, 2.1812483], zoom_start=12, tiles='openstreetmap')
     for id, station in updated_stations.iterrows():
-        color = color_gradient(station['BROKEN_DOCKS'], mean_broken_docks, std_dev_broken_docks)
+        color = color_gradient(station['BROKEN_DOCKS'], min_broken_docks, max_broken_docks)
         folium.Circle(location=[station["LAT"], station["LON"]], radius=60, color=color, fill_color=color, tooltip=f"{station['STATION_NAME']} - Broken Docks: {station['BROKEN_DOCKS']}").add_to(m_updated)
     
     st.subheader("Updated Distribution")
@@ -213,9 +214,3 @@ with snowflake.connector.connect(**st.secrets["snowflake"]) as my_cnx:
     final_entropy = calculate_entropy(updated_stations['BROKEN_DOCKS'], mean_broken_docks)
     st.write(f"Initial Entropy: {initial_entropy:.4f}")
     st.write(f"Final Entropy: {final_entropy:.4f}")
-
-    print("Original stations:")
-    print(broken_docks)
-    print()
-    print("Updated stations:")
-    print(updated_stations)
