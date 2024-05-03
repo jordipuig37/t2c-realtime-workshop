@@ -6,3 +6,4 @@ python-dotenv
 requests
 snowflake-connector-python
 streamlit_folium
+polyline
