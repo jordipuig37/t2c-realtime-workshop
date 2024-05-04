@@ -59,10 +59,12 @@ def color_gradient(ratio, treshold = 0.1):
         green = int(255 * (1 - (ratio - max_th) / min_th))
         return f"#{red:02x}{green:02x}{0:02x}"
 
+
 def calculate_entropy(ratio):
     if ratio == 0 or ratio == 1:
         return 0
     return -ratio * np.log2(ratio) - (1 - ratio) * np.log2(1 - ratio)
+
 
 def create_distance_matrix(stations):
     num_stations = len(stations)
@@ -81,7 +83,6 @@ def create_distance_matrix(stations):
     
     return distance_matrix
     
-
 
 def plan_continuous_route(in_stations, bus_capacity, th_high=0.0, th_low=0.1):
     stations = in_stations.copy()
