@@ -1,50 +1,36 @@
 import pandas as pd
 import numpy as np
+import snowflake.connector
+import streamlit as st
 
-def get_station_data(my_cnx):
-    with my_cnx.cursor() as my_cur:
-        # Retrieve data from F_LAST_UPDATED_STATUS
-        my_cur.execute("SELECT * FROM F_LAST_UPDATED_STATUS")
-        status_data = my_cur.fetchall()
-        status_columns = [x[0] for x in my_cur.description]
 
-        # Retrieve LAT and LON from V_BROKEN_DOCKERS
-        my_cur.execute("SELECT STATION_ID, LAT, LON FROM V_BROKEN_DOCKERS")
-        docker_data = my_cur.fetchall()
-        docker_columns = [x[0] for x in my_cur.description]
+def get_broken_dockers():
+    with snowflake.connector.connect(**st.secrets["snowflake"]) as my_cnx:
+        with my_cnx.cursor() as my_cur:
+            my_cur.execute("SELECT * FROM V_BROKEN_DOCKERS WHERE BROKEN_DOCKS > 1 LIMIT 10")
+            # meta = my_cur.description
+            data =  my_cur.fetchall()
+            return pd.DataFrame(data, columns=list(map(lambda x: x[0], my_cur.description)))
 
-        # Combine the data based on STATION_ID
-        combined_data = []
-        for status_row in status_data:
-            station_id = status_row[status_columns.index('STATION_ID')]
-            num_bikes_available = status_row[status_columns.index('NUM_BIKES_AVAILABLE')]
-            num_docks_available = status_row[status_columns.index('NUM_DOCKS_AVAILABLE')]
 
-            # Skip rows where the sum of NUM_BIKES_AVAILABLE and NUM_DOCKS_AVAILABLE is zero
-            if num_bikes_available + num_docks_available == 0:
-                continue
-
-            docker_row = next((row for row in docker_data if row[docker_columns.index('STATION_ID')] == station_id), None)
-            if docker_row:
-                lat = docker_row[docker_columns.index('LAT')]
-                lon = docker_row[docker_columns.index('LON')]
-                combined_row = status_row + (lat, lon)
-                combined_data.append(combined_row)
-
-        # Create a DataFrame with the combined data
-        columns = status_columns + ['LAT', 'LON']
-        
-        df = pd.DataFrame(combined_data, columns=columns)
-        df.drop(columns=['LAST_REPORTED', 'IS_CHARGING_STATION', 'STATUS', 'IS_INSTALLED', 'IS_RENTING', 'IS_RETURNING', 'TRAFFIC', 'TST_REC', 'NUM_BIKES_AVAILABLE_MECHANICAL', 'NUM_BIKES_AVAILABLE_EBIKE'], inplace=True)
-        
-        df['TOTAL_CAPACITY'] = df['NUM_BIKES_AVAILABLE'] + df['NUM_DOCKS_AVAILABLE']
-        df['RATIO'] = df['NUM_BIKES_AVAILABLE'] / df['TOTAL_CAPACITY']
-        
-        return df
+def get_station_data():
+    with snowflake.connector.connect(**st.secrets["snowflake"]) as my_cnx:
+        with my_cnx.cursor() as my_cur:
+            # Retrieve data from F_LAST_UPDATED_STATUS
+            my_cur.execute('SELECT * FROM F_LAST_UPDATED_STATUS')
+            status_data = my_cur.fetchall()
+            status_columns = [x[0] for x in my_cur.description]
+            
+            df = pd.DataFrame(status_data, columns=status_columns)
+            df.drop(columns=['LAST_REPORTED', 'LAST_REPORTED_TST', 'IS_CHARGING_STATION', 'STATUS', 'IS_INSTALLED', 'IS_RENTING', 'IS_RETURNING', 'TRAFFIC', 'TST_REC', 'NUM_BIKES_AVAILABLE_MECHANICAL', 'NUM_BIKES_AVAILABLE_EBIKE'], inplace=True)
+            
+            df['TOTAL_CAPACITY'] = df['CAPACITY']
+            df['RATIO'] = df['OCCUPATION_RATIO']
+            
+            return df
 
 
 def color_gradient(ratio, treshold = 0.1):
-    
     min_th = 0.5 - treshold
     max_th = 0.5 + treshold
     
@@ -170,3 +156,44 @@ def plan_continuous_route(in_stations, bus_capacity, th_high=0.0, th_low=0.1):
         num_stations_to_visit -= 1
 
     return route, stations
+
+# this function is used to aggregate stations in the map
+my_icon_create_function = '''
+    function(cluster) {
+        var childMarkers = cluster.getAllChildMarkers();
+        var totalRatio = 0;
+        var count = 0;
+        
+        // Calculate the total ratio and count of child markers
+        childMarkers.forEach(function(marker) {
+            if (marker.options && marker.options.weight) {
+                totalRatio += (marker.options.weight-2);
+                count++;
+            }
+        });
+        
+        // Calculate the average ratio
+        var ratio = count > 0 ? totalRatio / count : 0;
+        const min_th = 0.5 - 0.1;
+        const max_th = 0.5 + 0.1;
+        var fillColor = "#00FF00";
+
+        if (ratio >= min_th && ratio <= max_th) {
+            var fillColor = "#00FF00";  // Green
+        } else if (ratio < min_th) {
+            var blue = Math.floor(255 * (min_th - ratio) / min_th);
+            var green = Math.floor(255 * ratio / min_th);
+            var fillColor = `#00${(green).toString(16).padStart(2, '0')}${(blue).toString(16).padStart(2, '0')}`;
+        } else {
+            var red = Math.floor(255 * (ratio - max_th) / min_th);
+            var green = Math.floor(255 * (1 - (ratio - max_th) / min_th));
+            var fillColor = `#${(red).toString(16).padStart(2, '0')}${(green).toString(16).padStart(2, '0')}00`;
+        }
+        // Create a custom HTML div icon with the average ratio
+        return L.divIcon({
+            html: `<div style="background-color: ${fillColor}; opacity: 0.7; border: 2px solid ${fillColor};"></div>`,
+            className: 'marker-cluster marker-cluster-small',
+            iconSize: new L.Point(20, 20)
+        });
+    }
+'''

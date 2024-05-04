@@ -1,31 +1,32 @@
 // set a schema just in case, but here we will start to explicitly indicate it
-USE SCHEMA INGEST;
+USE SCHEMA SERVE;
 
 
 // Create a stream on the staging table. This will capture the changing data (CDC)
 // of the staging table
 CREATE OR REPLACE STREAM
-    INGEST.ST_CDC_STG_F_BICING_STATIONS
-ON TABLE INGEST.STG_F_BICING_STATIONS
+    SERVE.ST_CDC_STG_F_BICING_STATIONS
+ON TABLE INGEST.STG_F_BICING_STATIONS_STATUS
 ;
 
 // we should expect false the first time, but after some time we will see true
 select system$stream_has_data('ST_CDC_STG_F_BICING_STATIONS');
 
-USE SCHEMA SERVE;
 
 // Create a table to store the last updated status
 CREATE OR REPLACE TABLE
     SERVE.F_LAST_UPDATED_STATUS
 (
-// [ ] ADD:
-//      * station_name
-//      * station capacity
     STATION_ID INTEGER,
+    STATION_NAME VARCHAR(1024),
+    LAT NUMBER(12, 7),
+    LON NUMBER(12, 7),
+    CAPACITY INTEGER,
     NUM_BIKES_AVAILABLE INTEGER,
     NUM_BIKES_AVAILABLE_MECHANICAL INTEGER,
     NUM_BIKES_AVAILABLE_EBIKE INTEGER,
     NUM_DOCKS_AVAILABLE INTEGER,
+    OCCUPATION_RATIO NUMBER(12,4),
     LAST_REPORTED INTEGER,
     LAST_REPORTED_TST TIMESTAMP_NTZ(9),
     IS_CHARGING_STATION BOOLEAN,
@@ -46,17 +47,85 @@ CREATE OR REPLACE PROCEDURE
 AS
 $$
 BEGIN
-    // [ ] Replace this with a merge
-    TRUNCATE TABLE SERVE.F_LAST_UPDATED_STATUS;
-    INSERT INTO SERVE.F_LAST_UPDATED_STATUS
-    SELECT
+    CREATE OR REPLACE TEMPORARY TABLE
+        TEMP_F_LAST_UPDATED_STATUS_TO_MERGE
+    AS
+    WITH
+    m_stations AS (
+        SELECT STATION_ID, STATION_NAME, LAT, LON, CAPACITY
+        FROM SERVE.M_BICING_STATIONS
+    ),
+
+    new_status AS (
+        SELECT *
+        FROM SERVE.ST_CDC_STG_F_BICING_STATIONS
+    ),
+
+    final AS (
+        SELECT
+            ff.STATION_ID,
+            mm.STATION_NAME,
+            mm.LAT,
+            mm.LON,
+            mm.CAPACITY,
+            ff.NUM_BIKES_AVAILABLE,
+            ff.NUM_BIKES_AVAILABLE_MECHANICAL,
+            ff.NUM_BIKES_AVAILABLE_EBIKE,
+            ff.NUM_DOCKS_AVAILABLE,
+            ff.NUM_BIKES_AVAILABLE / mm.CAPACITY AS OCCUPATION_RATIO,
+            ff.LAST_REPORTED,
+            to_timestamp(ff.LAST_REPORTED) AS LAST_REPORTED_TST,
+            ff.IS_CHARGING_STATION,
+            ff.STATUS,
+            ff.IS_INSTALLED,
+            ff.IS_RENTING,
+            ff.IS_RETURNING,
+            ff.TRAFFIC,
+            CURRENT_TIMESTAMP() AS TST_REC
+        FROM new_status ff
+        LEFT JOIN m_stations mm ON
+            ff.STATION_ID = mm.STATION_ID
+    )
+
+    SELECT * FROM final;
+
+    MERGE INTO SERVE.F_LAST_UPDATED_STATUS AS tgt
+    USING TEMP_F_LAST_UPDATED_STATUS_TO_MERGE AS src
+    ON tgt.STATION_ID = src.STATION_ID
+    WHEN MATCHED THEN
+        UPDATE SET
+            tgt.STATION_NAME = src.STATION_NAME,
+            tgt.LAT = src.LAT,
+            tgt.LON = src.LON,
+            tgt.CAPACITY = src.CAPACITY,
+            tgt.NUM_BIKES_AVAILABLE = src.NUM_BIKES_AVAILABLE,
+            tgt.NUM_BIKES_AVAILABLE_MECHANICAL = src.NUM_BIKES_AVAILABLE_MECHANICAL,
+            tgt.NUM_BIKES_AVAILABLE_EBIKE = src.NUM_BIKES_AVAILABLE_EBIKE,
+            tgt.NUM_DOCKS_AVAILABLE = src.NUM_DOCKS_AVAILABLE,
+            tgt.OCCUPATION_RATIO = src.OCCUPATION_RATIO,
+            tgt.LAST_REPORTED = src.LAST_REPORTED,
+            tgt.LAST_REPORTED_TST = src.LAST_REPORTED_TST,
+            tgt.IS_CHARGING_STATION = src.IS_CHARGING_STATION,
+            tgt.STATUS = src.STATUS,
+            tgt.IS_INSTALLED = src.IS_INSTALLED,
+            tgt.IS_RENTING = src.IS_RENTING,
+            tgt.IS_RETURNING = src.IS_RETURNING,
+            tgt.TRAFFIC = src.TRAFFIC,
+            tgt.TST_REC = src.TST_REC
+    WHEN NOT MATCHED THEN
+    INSERT (
         STATION_ID,
+        STATION_NAME,
+        LAT,
+        LON,
+        CAPACITY,
         NUM_BIKES_AVAILABLE,
         NUM_BIKES_AVAILABLE_MECHANICAL,
         NUM_BIKES_AVAILABLE_EBIKE,
         NUM_DOCKS_AVAILABLE,
+        OCCUPATION_RATIO,
         LAST_REPORTED,
-        to_timestamp(LAST_REPORTED) AS LAST_REPORTED_TST,
+        LAST_REPORTED_TST,
         IS_CHARGING_STATION,
         STATUS,
         IS_INSTALLED,
@@ -64,11 +133,36 @@ BEGIN
         IS_RETURNING,
         TRAFFIC,
         TST_REC
-    FROM INGEST.ST_CDC_STG_F_BICING_STATIONS;
-    RETURN 'Done';
+    )
+    VALUES (
+        src.STATION_ID,
+        src.STATION_NAME,
+        src.LAT,
+        src.LON,
+        src.CAPACITY,
+        src.NUM_BIKES_AVAILABLE,
+        src.NUM_BIKES_AVAILABLE_MECHANICAL,
+        src.NUM_BIKES_AVAILABLE_EBIKE,
+        src.NUM_DOCKS_AVAILABLE,
+        src.OCCUPATION_RATIO,
+        src.LAST_REPORTED,
+        src.LAST_REPORTED_TST,
+        src.IS_CHARGING_STATION,
+        src.STATUS,
+        src.IS_INSTALLED,
+        src.IS_RENTING,
+        src.IS_RETURNING,
+        src.TRAFFIC,
+        src.TST_REC
+    );
+    RETURN 'Processed ' || (select count(*) from TEMP_F_LAST_UPDATED_STATUS_TO_MERGE) || ' rows';
 END
 $$
 ;
+
+call SERVE.SP_REFRESH_LAST_UPDATED_STATUS();
+
+SELECT * FROM F_LAST_UPDATED_STATUS;
 
 CREATE OR REPLACE TASK
     SERVE.TSK_REFRESH_LAST_UPDATED_STATUS
@@ -83,129 +177,3 @@ AS
 ALTER TASK SERVE.TSK_REFRESH_LAST_UPDATED_STATUS RESUME;
 
 -------------------------------------------------------------------------------
-
-// Create a table with the historic of the status. Here we will aggregate the
-// data in buckets of 20 minutes and add the master data information
-CREATE OR REPLACE TABLE
-    SERVE.F_HISTORIC_STATION_STATUS
-(
-    STATION_ID INTEGER,
-    TIME_WINDOW_START TIMESTAMP_NTZ(9),
-    STATION_NAME VARCHAR(1024),
-    LAT NUMBER(12, 7),
-    LON NUMBER(12, 7),
-    ADDRESS VARCHAR(1024),
-    CAPACITY INTEGER,
-    --- fact data:
-    NUM_BIKES_AVAILABLE INTEGER,
-    NUM_BIKES_AVAILABLE_MECHANICAL INTEGER,
-    NUM_BIKES_AVAILABLE_EBIKE INTEGER,
-    NUM_DOCKS_AVAILABLE INTEGER,
-    NUM_BIKES_IN INTEGER,
-    NUM_BIKES_OUT INTEGER,
-    STATUS VARCHAR(1024),
-    TST_REC TIMESTAMP_NTZ(9)
-);
-
-// create a stored procedure that will process the data and load this table and
-// a task that will be executed every 20 minutes
-CREATE OR REPLACE PROCEDURE
-    SP_COMPUTE_WINDOW_STATION_STATUS()
-/** This is the stored procedure that loads F_HISTORIC_STATION_STATUS
-    by aggregating data from staging and enriching it with station master data
-*/
-    RETURNS STRING
-    LANGUAGE SQL
-    EXECUTE AS CALLER
-AS
-$$
-BEGIN
-    // create a temp table to store the data using a CTAS statement and CTE
-    CREATE TEMPORARY TABLE
-        TEMP_F_WINDOW_STATION_STATUS
-    AS
-    WITH
-    stations_master AS (
-        SELECT
-            STATION_ID,
-            STATION_NAME,
-            LAT, LON,
-            ADDRESS,
-            CAPACITY
-        FROM M_BICING_STATIONS
-    ),
-
-    last_20_min_data AS (
-        SELECT
-            STATION_ID,
-            NUM_BIKES_AVAILABLE,
-            NUM_BIKES_AVAILABLE - LAG(NUM_BIKES_AVAILABLE, 1) OVER (
-                PARTITION BY STATION_ID
-                ORDER BY LAST_REPORTED) AS BIKES_DIFF,
-            NUM_BIKES_AVAILABLE_MECHANICAL,
-            NUM_BIKES_AVAILABLE_EBIKE,
-            NUM_DOCKS_AVAILABLE,
-            STATUS,
-            to_timestamp(LAST_REPORTED) AS LAST_REPORTED_TST
-        FROM INGEST.STG_F_BICING_STATIONS_STATUS
-        WHERE to_timestamp(LAST_REPORTED) >= DATEADD(MINUTE, -20, current_timestamp())
-    ),
-
-    aggregated_20_min AS (
-        SELECT
-            STATION_ID,
-            MIN(LAST_REPORTED_TST) AS TIME_WINDOW_START,
-            MEDIAN(NUM_BIKES_AVAILABLE)
-            MEDIAN(NUM_BIKES_AVAILABLE_MECHANICAL)
-            MEDIAN(NUM_BIKES_AVAILABLE_EBIKE)
-            MEDIAN(NUM_DOCKS_AVAILABLE)
-            SUM(CASE BIKES_DIFF > 0 THEN BIKES_DIFF ELSE 0) AS BIKES_IN
-            SUM(CASE BIKES_DIFF < 0 THEN BIKES_DIFF ELSE 0) AS BIKES_OUT
-
-        FROM last_20_min_data
-        GROUP BY STATION_ID
-    ),
-
-    final AS (
-        SELECT
-            agr.STATION_ID,
-            agr.TIME_WINDOW_START,
-            mm.STATION_NAME,
-            mm.LAT, mm.LON,
-            mm.ADDRESS, mm.CAPACITY,
-            agr.NUM_BIKES_AVAILABLE,
-            NUM_BIKES_AVAILABLE_MECHANICAL,
-            NUM_BIKES_AVAILABLE_EBIKE,
-            NUM_DOCKS_AVAILABLE,
-            NUM_BIKES_IN,
-            NUM_BIKES_OUT,
-            STATUS,
-            current_timestamp() AS TST_REC
-        FROM aggregated_20_min agr
-        LEFT JOIN stations_master mm ON
-            agr.STATION_ID = mm.STATION_ID
-    )
-
-    SELECT * FROM final;
-
-    // perform the insert statement
-    INSERT INTO F_HISTORIC_STATION_STATUS
-    SELECT
-        *
-    FROM TEMP_F_WINDOW_STATION_STATUS;
-
-    RETURN 'Done';
-END
-$$
-;
-
-// and create the task that will run every 20 minutes
-CREATE OR REPLACE TASK
-    TSK_COMPUTE_WINDOW_STATION_STATUS
-    WAREHOUSE='COMPUTE_WH'
-    SCHEDULE = '20 minutes'
-AS
-    CALL SP_COMPUTE_WINDOW_STATION_STATUS()
-;
-
-ALTER TASK TSK_COMPUTE_WINDOW_STATION_STATUS RESUME;
