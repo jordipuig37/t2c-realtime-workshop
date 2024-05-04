@@ -5,3 +5,5 @@ data*
 .streamlit/secrets.toml
 *.drawio*
 *.crontab
+calculate_things.ipynb
+__pycache__
