@@ -26,6 +26,13 @@ def get_station_data():
             
             df['TOTAL_CAPACITY'] = df['CAPACITY']
             df['RATIO'] = df['OCCUPATION_RATIO']
+            # Convert 'LAT' and 'LON' to float64
+            df['LAT'] = df['LAT'].astype(float)
+            df['LON'] = df['LON'].astype(float)
+
+            # Convert 'OCCUPATION_RATIO' and 'RATIO' to float64
+            df['OCCUPATION_RATIO'] = df['OCCUPATION_RATIO'].astype(float)
+            df['RATIO'] = df['RATIO'].astype(float)
             
             return df
 
