@@ -66,8 +66,6 @@ Now that we have a grasp of some theroy, let's start building our application to
 
 **Bonus**: here we have a detailed diagram that pictures all the objects we just created and their relations.
 
-[ ] Work in progress
-
 <p align="center">
 <img src="assets/snowflake-diagram.png"
         alt="A simplified map to visualize the relation of all the objects in the Snowflake account.">
