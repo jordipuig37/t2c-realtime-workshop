@@ -28,6 +28,7 @@ Here are some definitions of Snowflake objects and concepts that will be useful 
 
 ### Basic Stuff:
 
+* **Snowflake Account**: Snowflake is a SaaS cloud-based data platform designed for analytics. A Snowflake account represents an individual instance of this software, providing a defined scope for users and databases.
 * **Database**: A container for schemas, tables, and other database objects.
 * **Schema**: A logical container for database objects such as tables, views, and procedures.
 
@@ -84,7 +85,7 @@ Setting up the Streamlit account to have your own version of the app may take mo
 4. **Configure secrets in your app**: In order to access your Snowflake account, you need to indicate the following variables. First edit this config file to indicate your user and password as well as your account ID.
 
 >
-> To knwo your Snowflake ID, place the mouse over your user profile and go to `Account > click your account > Copy account identifier` like int he following image. Use your account ID replacing the `.` with a `-`.
+> To know your Snowflake ID, place the mouse over your user profile, and go to `Account > click your account > Copy account identifier` like in the following image. Use your account ID and replace `.` with `-`.
 >
 
 <p align="center">
@@ -97,9 +98,9 @@ Sample secrets file:
 
 ```toml
 [snowflake]
-user = <your username>
-password = <your password>
-account = <snowflake-id>
+user = "your-username"
+password = "your-password"
+account = "your-snowflake-id"
 warehouse = "COMPUTE_WH" 
 database = "REAL_TIME_DEMO" 
 schema = "SERVE"
@@ -110,7 +111,12 @@ Make any necessary changes to this variables to match your own account.
 
 5. **Access your app**: Click to your application link to check everything is working properly.
 
-## Congratulations you finished the workshop
+## Congratulations you finished the workshop!
+
+### Further reading
+
+* [Snowflake Hands-on Labs](https://www.notion.so/t2client/Modificacions-Worksop-Bicing-Forecasting-e1eddcc7a6fc4bc88e1b1b03fe178b93?pvs=4#fe2900295f044bd7a5bdf782a4311287)
+* [Send us your CV](https://tally.so/r/w24lYe), optionally share your feedback too.
 
 ## License
 
