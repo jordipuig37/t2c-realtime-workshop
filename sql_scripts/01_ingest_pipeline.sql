@@ -1,5 +1,5 @@
 USE DATABASE REAL_TIME_DEMO;
-USE SCHEMA INGEST;
+USE SCHEMA BICING;
 
 // Create the stage that points to the location where we will read data from.
 CREATE OR REPLACE STAGE S_T2C_REALTIME_DATA 
@@ -92,10 +92,9 @@ FILE_FORMAT = json_format  // use the file format
 // Load the master data table which contains data for each station
 // We will load the data directly to the serving schema because this will data
 // is static.
-USE SCHEMA SERVE;
 
 CREATE OR REPLACE TABLE
-    SERVE.M_BICING_STATIONS
+    M_BICING_STATIONS
 (
     STATION_ID INTEGER,
     STATION_NAME VARCHAR(1024),
@@ -131,9 +130,9 @@ FROM (
         get($1, 'rental_uris')::text AS RENTAL_URIS,
         current_timestamp() AS TST_REC
 
-    FROM @INGEST.S_T2C_REALTIME_DATA/master/stations
+    FROM @S_T2C_REALTIME_DATA/master/stations
 )
-FILE_FORMAT = INGEST.json_format
+FILE_FORMAT = json_format
 ;
 
 // check the data we just loaded

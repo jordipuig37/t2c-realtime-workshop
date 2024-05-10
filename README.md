@@ -103,8 +103,8 @@ password = "your-password"
 account = "your-snowflake-id"
 warehouse = "COMPUTE_WH" 
 database = "REAL_TIME_DEMO" 
-schema = "SERVE"
-role = "SYSADMIN"
+schema = "BICING"
+role = "ACCOUNTADMIN"
 ```
 
 Make any necessary changes to this variables to match your own account.

@@ -1,12 +1,12 @@
-// set a schema just in case, but here we will start to explicitly indicate it
-USE SCHEMA SERVE;
+USE DATABASE REAL_TIME_DEMO;
+USE SCHEMA BICING;
 
 
 // Create a stream on the staging table. This will capture the changing data (CDC)
 // of the staging table
 CREATE OR REPLACE STREAM
-    SERVE.ST_CDC_STG_F_BICING_STATIONS
-ON TABLE INGEST.STG_F_BICING_STATIONS_STATUS
+    ST_CDC_STG_F_BICING_STATIONS
+ON TABLE STG_F_BICING_STATIONS_STATUS
 ;
 
 // we should expect false the first time, but after some time we will see true
@@ -15,7 +15,7 @@ select system$stream_has_data('ST_CDC_STG_F_BICING_STATIONS');
 
 // Create a table to store the last updated status
 CREATE OR REPLACE TABLE
-    SERVE.F_LAST_UPDATED_STATUS
+    F_LAST_UPDATED_STATUS
 (
     STATION_ID INTEGER,
     STATION_NAME VARCHAR(1024),
@@ -39,7 +39,7 @@ CREATE OR REPLACE TABLE
 );
 
 CREATE OR REPLACE PROCEDURE
-    SERVE.SP_REFRESH_LAST_UPDATED_STATUS()
+    SP_REFRESH_LAST_UPDATED_STATUS()
 /** This is the stored procedure that executes the logic. */
     RETURNS STRING
     LANGUAGE SQL
@@ -53,12 +53,12 @@ BEGIN
     WITH
     m_stations AS (
         SELECT STATION_ID, STATION_NAME, LAT, LON, CAPACITY
-        FROM SERVE.M_BICING_STATIONS
+        FROM M_BICING_STATIONS
     ),
 
     new_status AS (
         SELECT *
-        FROM SERVE.ST_CDC_STG_F_BICING_STATIONS
+        FROM ST_CDC_STG_F_BICING_STATIONS
     ),
 
     final AS (
@@ -89,7 +89,7 @@ BEGIN
 
     SELECT * FROM final;
 
-    MERGE INTO SERVE.F_LAST_UPDATED_STATUS AS tgt
+    MERGE INTO F_LAST_UPDATED_STATUS AS tgt
     USING TEMP_F_LAST_UPDATED_STATUS_TO_MERGE AS src
     ON tgt.STATION_ID = src.STATION_ID
     WHEN MATCHED THEN
@@ -160,20 +160,20 @@ END
 $$
 ;
 
-call SERVE.SP_REFRESH_LAST_UPDATED_STATUS();
+call SP_REFRESH_LAST_UPDATED_STATUS();
 
 SELECT * FROM F_LAST_UPDATED_STATUS;
 
 CREATE OR REPLACE TASK
-    SERVE.TSK_REFRESH_LAST_UPDATED_STATUS
+    TSK_REFRESH_LAST_UPDATED_STATUS
     WAREHOUSE='COMPUTE_WH'
     SCHEDULE = '5 minutes'  // we use this option
 WHEN
     system$stream_has_data('ST_CDC_STG_F_BICING_STATIONS')
 AS
-    CALL SERVE.SP_REFRESH_LAST_UPDATED_STATUS()
+    CALL SP_REFRESH_LAST_UPDATED_STATUS()
 ;
 
-ALTER TASK SERVE.TSK_REFRESH_LAST_UPDATED_STATUS RESUME;
+ALTER TASK TSK_REFRESH_LAST_UPDATED_STATUS RESUME;
 
 -------------------------------------------------------------------------------
