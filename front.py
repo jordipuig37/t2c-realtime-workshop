@@ -17,8 +17,7 @@ from logic import (
 st. set_page_config(page_title="T2C Real Time Workshop", layout="wide")
 
 
-# [ ] better name this
-def build_complete_map(broken_docks):
+def build_broken_docks_map(broken_docks):
     map = folium.Map(location=(41.3933173, 2.1812483),
                 zoom_start=12, tiles="openstreetmap")
 
@@ -141,17 +140,14 @@ def broken_docks_page():
     st.title("Broken Docks")
     col1, col2 = st.columns([2, 1])
     broken_docks = get_broken_dockers()
-    map = build_complete_map(broken_docks)
+    map = build_broken_docks_map(broken_docks)
     with col1:
         st.subheader("City Bike Stations Map")
         folium_static(map, height=400)
 
     with col2:  # Display metadata in the second column
         st.subheader("Station List")
-        st.dataframe(broken_docks[["STATION_NAME", "BROKEN_DOCKS"]], hide_index=True)
-        # for _, station in broken_docks.iterrows():
-        #     st.write(f"**{station['STATION_NAME']}**: Broken Docks: {station['BROKEN_DOCKS']}")
-            # st.write(f"More metadatas: {station['BROKEN_DOCKS']}")
+        st.dataframe(broken_docks[["STATION_NAME", "BROKEN_DOCKS"]])
 
 
 def main():
@@ -162,6 +158,7 @@ def main():
         broken_docks_page()
     elif app_mode == "Bike Distribution":
         distribution_page()
+
 
 if __name__ == "__main__":
     main()
